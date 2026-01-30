@@ -1,148 +1,204 @@
-# Spend Pulse - OpenClaw Skill
+# Spend Pulse
 
 > Proactive spending alerts via Plaid. Track credit card spending against a monthly budget with pace-based alerts.
 
-## Overview
+## Installation
 
-Spend Pulse is a CLI tool that tracks spending and tells you when to alert the user. It's designed for the "AI runs this on cron" pattern—you handle the scheduling and messaging, spend-pulse provides the data and alert decisions.
+```bash
+# Install globally
+npm install -g spend-pulse
 
-**Primary command:** `spend-pulse check`
-
-## Requirements
-
-```yaml
-requires:
-  bins: ["spend-pulse"]
+# Or from source
+git clone https://github.com/jbornhorst1524/spend-pulse.git
+cd spend-pulse
+npm install && npm run build && npm link
 ```
 
-Install via npm:
+Verify installation:
 ```bash
-npm install -g spend-pulse
+spend-pulse --version
+```
+
+## First-Time Setup
+
+Run the interactive setup wizard:
+
+```bash
+spend-pulse setup
+```
+
+This will:
+1. Prompt for Plaid API credentials (get them at https://dashboard.plaid.com/developers/keys)
+2. Ask to choose Sandbox (test data) or Development (real bank) mode
+3. Set monthly spending budget
+4. Open browser for Plaid Link bank authentication
+5. Store credentials securely in macOS Keychain
+
+**For Sandbox testing**, use these Plaid test credentials when the bank login appears:
+- Username: `user_good`
+- Password: `pass_good`
+
+After setup, run initial sync:
+```bash
+spend-pulse sync
 ```
 
 ## Commands
 
-### `spend-pulse check` (Primary)
+### `spend-pulse check` — Primary Command
 
-Returns structured alert decision with all context needed. Use this as your main command.
+Returns alert decision with full context. **This is the main command to use.**
 
 ```yaml
 should_alert: true
 reasons:
-  - "3 new transactions since last check"
-  - "Approaching end of month (1 day left)"
-
+  - 3 new transactions
+  - end of month approaching
 month: "2026-01"
 budget: 8000
 spent: 6801.29
 remaining: 1198.71
-
+day_of_month: 30
+days_in_month: 31
+days_remaining: 1
+expected_spend: 7741.94
 pace: under
-pace_delta: 940.65
+pace_delta: -940.65
 pace_percent: -12
-
-oneline: "Jan: $6.8k of $8k (85%) • $1.2k left • 1 day • ✓ Under pace"
-
+oneline: "Jan: $6.8k of $8k (85%) | $1.2k left | 1 days | > On track"
 new_transactions: 3
 new_items:
-  - merchant: "Whole Foods"
+  - merchant: Whole Foods
     amount: 47.50
-    category: "Food & Drink"
-  - merchant: "Amazon"
+    category: Groceries
+  - merchant: Amazon
     amount: 125.00
-    category: "Shopping"
+    category: Shopping
 ```
 
-**Alert logic:**
-- `should_alert: true` if new transactions exist
-- Also alerts if over pace, low remaining budget, or end of month
+**Alert triggers** (`should_alert: true` when any apply):
+- New transactions since last check
+- Over pace (spending faster than expected)
+- Remaining budget < $500
+- End of month (last 3 days)
+- First of month (new month started)
 
 ### `spend-pulse sync`
 
-Pulls latest transactions from Plaid. Run before `check` for fresh data.
+Pull latest transactions from Plaid. Run before `check` for fresh data.
 
 ```yaml
 synced: 16
 new: 3
 account: "Amex Gold (...1234)"
-total_this_month: 4800.00
+total_this_month: 6801.29
 ```
 
-### `spend-pulse status`
+### `spend-pulse status [--oneline]`
 
-Full spending summary. Use `--oneline` for a quick summary string.
+Full spending summary, or quick one-liner:
 
 ```bash
 spend-pulse status --oneline
-# Output: "Jan: $6.8k of $8k (85%) • $1.2k left • 1 day • ✓ Under pace"
+# Jan: $6.8k of $8k (85%) | $1.2k left | 1 days | > On track
 ```
 
-### `spend-pulse recent [--days N]`
+### `spend-pulse recent [--days N] [--count N]`
 
 Recent transactions (default: last 5 days).
 
 ### `spend-pulse config [key] [value]`
 
-View or set configuration:
-- `spend-pulse config` — show all
-- `spend-pulse config budget 8000` — set monthly budget
+View or modify settings:
+```bash
+spend-pulse config                  # show all
+spend-pulse config target 8000      # set monthly budget
+spend-pulse config timezone America/Chicago
+```
 
-## Usage Pattern
+### `spend-pulse link [--status] [--remove <id>]`
 
-**Recommended workflow:**
+Manage linked bank accounts:
+```bash
+spend-pulse link --status    # show linked accounts
+spend-pulse link             # add another account
+spend-pulse link --remove <item_id>
+```
+
+## Recommended Workflow
 
 ```bash
-spend-pulse sync       # Pull latest from Plaid
-spend-pulse check      # Get alert decision + context
+# 1. Sync latest transactions
+spend-pulse sync
+
+# 2. Check if alert needed
+spend-pulse check
 ```
 
-If `should_alert: true`, compose a brief, friendly spending update using the data provided.
+**If `should_alert: true`**: Compose a brief, friendly spending update using the data.
 
-If `should_alert: false`, stay quiet unless the user explicitly asks about spending.
+**If `should_alert: false`**: Stay quiet unless the user asks about spending.
 
-## Alert Guidelines
+## Composing Messages
 
-- Use `oneline` as the core message
-- Add context from `reasons` array
-- Mention 1-2 notable transactions from `new_items` if interesting
-- Keep messages under 280 characters when possible
-- Tone: helpful friend, not nagging accountant
-
-## Example Messages
+Use the `oneline` field as the core message, then add context:
 
 **Under pace (positive):**
-> "Quick pulse: Jan at $6.8k of $8k, $1.2k left with 1 day to go. Under pace by 12%—nice work!"
+> "Quick spending pulse: Jan at $6.8k of $8k, $1.2k left with 1 day to go. Under pace by 12%—nice work!"
 
 **On track:**
-> "January update: $5,500 of $8k (69%) with 10 days left. Right on pace. Recent: $125 Amazon, $47 Whole Foods."
+> "January update: $5.5k of $8k (69%) with 10 days left. Right on pace. Recent: $125 Amazon, $47 Whole Foods."
 
-**Over pace (concerning):**
-> "Heads up—January's at $7,200 of $8k with 5 days to go. About 10% over pace. The travel charges added up."
+**Over pace (heads up):**
+> "Heads up—January's at $7.2k of $8k with 5 days to go. About 10% over pace. The travel charges added up."
 
 **Over budget:**
-> "January budget update: $8,500 total, about $500 over the $8k target. Something to keep in mind for February."
+> "January budget: $8.5k spent, about $500 over the $8k target. Something to keep in mind for February."
 
-## Cron Setup Example
-
-Run every 2 days at 6pm:
-
-```
-0 18 */2 * *
-```
-
-Workflow:
-1. Run `spend-pulse sync` to refresh data
-2. Run `spend-pulse check` to get alert decision
-3. If `should_alert: true`, compose and send message
-4. If `should_alert: false`, do nothing
+**Guidelines:**
+- Tone: helpful friend, not nagging accountant
+- Keep under 280 characters when possible
+- Mention 1-2 notable items from `new_items` if interesting
+- Use `reasons` array for context
 
 ## Pace Explained
 
-Spend Pulse tracks spending against a **linear budget ramp**:
+Spend Pulse tracks against a **linear budget ramp**:
 
-- **expected**: Where you "should" be if spending evenly through the month
-- **actual**: Where you are
-- **pace_delta**: Difference (negative = under pace, positive = over)
-- **pace**: `under` | `on_track` | `over`
+- `expected_spend`: Where you "should" be spending evenly through month
+- `spent`: Actual spending
+- `pace_delta`: Difference (negative = under, positive = over)
+- `pace`: `under` | `on_track` | `over`
 
-This is more useful than simple threshold alerts because it accounts for where you are in the month.
+Example: Day 15 of 30 with $8k budget → expected ~$4k spent.
+
+## Scheduling (Optional)
+
+Set up automated daily sync via launchd:
+
+```bash
+spend-pulse sync --schedule daily      # Install daily sync at 9am
+spend-pulse sync --schedule 18:00      # Or specific time
+spend-pulse sync --status              # Check schedule
+spend-pulse sync --unschedule          # Remove schedule
+```
+
+## Upgrading to Real Bank Data
+
+After testing with Sandbox, upgrade to Development mode for real transactions:
+
+```bash
+spend-pulse setup --upgrade
+```
+
+This clears sandbox data and connects your real bank account.
+
+## Troubleshooting
+
+**"Plaid credentials not found"**: Run `spend-pulse setup` to configure.
+
+**"Access token not found"**: Run `spend-pulse setup` to re-authenticate.
+
+**"No accounts found"**: Check `spend-pulse link --status` and add account if needed.
+
+**Stale data**: Run `spend-pulse sync` to refresh from Plaid.
