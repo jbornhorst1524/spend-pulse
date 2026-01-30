@@ -7,6 +7,15 @@
   "bin": {
     "spend-pulse": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -26,6 +35,10 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jbornhorst1524/spend-pulse.git"
+  },
+  "homepage": "https://github.com/jbornhorst1524/spend-pulse#readme",
+  "bugs": {
+    "url": "https://github.com/jbornhorst1524/spend-pulse/issues"
   },
   "author": "Jason Bornhorst",
   "license": "MIT",
