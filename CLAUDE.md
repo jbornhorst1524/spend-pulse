@@ -12,7 +12,7 @@ Spend Pulse is a CLI tool (`spend-pulse`) that tracks credit card spending again
 
 ## Project Status
 
-**Current:** Preparing for first public commit. Migrated from private spike project.
+**Current:** Feature complete. Ready for polish and npm publish.
 
 **Done:**
 - Basic CLI structure (Commander)
@@ -22,18 +22,20 @@ Spend Pulse is a CLI tool (`spend-pulse`) that tracks credit card spending again
 - `spend-pulse status` and `spend-pulse status --oneline`
 - `spend-pulse recent` command
 - Pace calculation
-- Renamed from `spend` to `spend-pulse`
+- Secure credential storage (macOS Keychain via keytar)
+- Guided onboarding wizard (`spend-pulse setup`)
+- `spend-pulse setup --upgrade` for Sandbox → Development
+- `spend-pulse link` command for multi-account management
+- Monthly data files (2026-01.yaml format)
+- Enhanced check output matching spec
+- Launchd scheduling (`spend-pulse sync --schedule daily`)
+- Unit and integration test suite (54 tests, vitest)
 
-**Next up (Phase 2):**
-- Secure credential storage: Move Plaid keys from config.yaml to macOS Keychain
-- Add `keytar` package for cross-platform keychain access
-- Create `lib/keychain.ts` for credential operations
-- Migration path for existing users
-
-**Future (Phase 3-4):**
-- Guided onboarding: `spend-pulse setup` with Sandbox-first flow
-- `spend-pulse setup --upgrade` for Development tier
-- Polish for npm publish
+**Next up (Phase 7: Polish & Publish):**
+- Update package.json metadata for npm publish
+- Add `"files"` and `"engines"` fields
+- Test `npm pack` and install from tarball
+- Publish to npm
 - Submit to OpenClaw skill directory
 
 ## Architecture
@@ -61,14 +63,17 @@ Spend Pulse is a CLI tool (`spend-pulse`) that tracks credit card spending again
 
 ```
 ~/.spend-pulse/
-  config.yaml           # Budget, settings, Plaid metadata
+  config.yaml           # Budget, settings, Plaid item metadata (no credentials)
   data/
-    transactions.yaml   # All transactions
+    2026-01.yaml        # Monthly transaction data
     summary.yaml        # Computed spending summary
     sync_result.yaml    # Last sync metadata
 ```
 
-**IMPORTANT:** Currently Plaid credentials are in config.yaml. Phase 2 will move them to macOS Keychain for security before public release with real user data.
+**Credentials:** Stored securely in macOS Keychain via `keytar`:
+- `spend-pulse` → `plaid-client-id`
+- `spend-pulse` → `plaid-secret`
+- `spend-pulse` → `plaid-access-token-<item_id>`
 
 ## CLI Commands
 
@@ -76,23 +81,33 @@ Spend Pulse is a CLI tool (`spend-pulse`) that tracks credit card spending again
 |---------|---------|
 | `spend-pulse check` | **Primary command.** Returns `should_alert` + full context for AI |
 | `spend-pulse sync` | Pull latest transactions from Plaid |
+| `spend-pulse sync --schedule daily` | Set up automated daily sync via launchd |
+| `spend-pulse sync --status` | Show sync schedule status |
 | `spend-pulse status` | Full spending summary as YAML |
 | `spend-pulse status --oneline` | Quick one-liner summary |
 | `spend-pulse recent [--days N]` | Recent transactions |
 | `spend-pulse config [key] [value]` | View/set configuration |
-| `spend-pulse setup` | Initial Plaid connection |
+| `spend-pulse setup` | Interactive setup wizard |
+| `spend-pulse setup --upgrade` | Upgrade from Sandbox to Development mode |
+| `spend-pulse link` | Add another bank account |
+| `spend-pulse link --status` | Show linked accounts |
+| `spend-pulse link --remove <id>` | Remove a linked account |
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | CLI entry point (Commander setup) |
-| `src/vault.ts` | Data persistence, paths, summary computation |
+| `src/vault.ts` | Data persistence, paths, summary computation, monthly files |
 | `src/plaid.ts` | Plaid client wrapper |
 | `src/types.ts` | TypeScript interfaces |
+| `src/lib/keychain.ts` | Secure credential storage via keytar |
+| `src/lib/scheduler.ts` | Launchd plist generation for automated sync |
 | `src/commands/check.ts` | The money command—alert decision logic |
-| `src/commands/sync.ts` | Plaid transaction sync |
-| `src/commands/setup.ts` | Plaid Link auth flow |
+| `src/commands/sync.ts` | Plaid transaction sync + scheduling |
+| `src/commands/setup.ts` | Interactive setup wizard |
+| `src/commands/link.ts` | Multi-account management |
+| `tests/` | Unit and integration tests (vitest) |
 | `SKILL.md` | OpenClaw skill definition |
 
 ## Building & Running
@@ -103,6 +118,14 @@ npm run build        # Compile TypeScript
 npm link             # Make spend-pulse available globally
 
 spend-pulse --help   # Test it works
+```
+
+## Testing
+
+```bash
+npm test              # Run all tests (54 tests)
+npm run test:watch    # Watch mode
+npm run test:coverage # With coverage report
 ```
 
 ## Pace Calculation
@@ -133,7 +156,10 @@ paceDelta = actualSpend - expectedSpend
 - **CLI:** Commander
 - **Storage:** YAML (js-yaml)
 - **Bank API:** Plaid (plaid-node SDK)
-- **Future:** keytar for Keychain, launchd for scheduling
+- **Credentials:** keytar (macOS Keychain)
+- **Prompts:** prompts (interactive CLI)
+- **Scheduling:** launchd (macOS)
+- **Testing:** vitest
 
 ## OpenClaw Integration
 
@@ -145,13 +171,13 @@ Spend Pulse is designed as an OpenClaw skill. OpenClaw is an open-source persona
 
 See `SKILL.md` for the OpenClaw skill definition.
 
-## Security Notes
+## Security
 
-**For public release, we must ensure:**
-1. No hardcoded credentials in code (verified clean)
-2. `.gitignore` excludes all sensitive paths
-3. Config files with secrets never committed
-4. Future: Credentials in Keychain, not files
+**Credentials are secure:**
+- Plaid API keys stored in macOS Keychain (not files)
+- Access tokens stored per-item in Keychain
+- Config files contain no secrets
+- Legacy configs auto-migrate to Keychain on first run
 
 **Never commit:**
 - `~/.spend-pulse/` contents
