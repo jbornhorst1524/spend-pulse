@@ -12,7 +12,7 @@ Spend Pulse is a CLI tool (`spend-pulse`) that tracks credit card spending again
 
 ## Project Status
 
-**Current:** Feature complete. Ready for polish and npm publish.
+**Current:** Feature complete. Awaiting Plaid production approval, then QA and publish.
 
 **Done:**
 - Basic CLI structure (Commander)
@@ -30,13 +30,15 @@ Spend Pulse is a CLI tool (`spend-pulse`) that tracks credit card spending again
 - Enhanced check output matching spec
 - Launchd scheduling (`spend-pulse sync --schedule daily`)
 - Unit and integration test suite (54 tests, vitest)
+- package.json prepared for npm publish (files, engines, metadata)
+- Sandbox testing complete
+- OpenClaw integration validated (SKILL.md working)
 
-**Next up (Phase 7: Polish & Publish):**
-- Update package.json metadata for npm publish
-- Add `"files"` and `"engines"` fields
-- Test `npm pack` and install from tarball
-- Publish to npm
-- Submit to OpenClaw skill directory
+**Next up:**
+- Plaid production approval (pending)
+- QA with real bank data
+- Polish as needed
+- Publish to GitHub (public), npm, and OpenClaw skill directory
 
 ## Architecture
 
