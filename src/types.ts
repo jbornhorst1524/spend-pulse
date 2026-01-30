@@ -1,4 +1,18 @@
+export type PlaidMode = 'sandbox' | 'development';
+
+export interface PlaidItem {
+  item_id: string;
+  institution: string;
+  accounts: string[];
+}
+
 export interface PlaidConfig {
+  mode: PlaidMode;
+  items: PlaidItem[];
+}
+
+// Legacy config format (for migration)
+export interface LegacyPlaidConfig {
   client_id: string;
   secret: string;
   access_token: string;
@@ -12,6 +26,12 @@ export interface Settings {
 
 export interface Config {
   plaid: PlaidConfig;
+  settings: Settings;
+}
+
+// Legacy config format (for migration)
+export interface LegacyConfig {
+  plaid: LegacyPlaidConfig;
   settings: Settings;
 }
 
@@ -31,6 +51,14 @@ export interface Transaction {
 export interface TransactionsData {
   last_sync: string;
   account: Account;
+  transactions: Transaction[];
+}
+
+// Monthly data file format (e.g., 2026-01.yaml)
+export interface MonthlyData {
+  month: string;  // "2026-01" format
+  last_sync: string;
+  last_check?: string;
   transactions: Transaction[];
 }
 
@@ -99,8 +127,19 @@ export interface NewItem {
 export interface CheckResult {
   should_alert: boolean;
   reasons: string[];
-  pace: string;
+  month: string;
+  budget: number;
+  spent: number;
+  remaining: number;
+  day_of_month: number;
+  days_in_month: number;
+  days_remaining: number;
+  expected_spend: number;
+  pace: 'under' | 'on_track' | 'over';
+  pace_delta: number;
+  pace_percent: number;
   oneline: string;
   new_transactions: number;
+  last_check?: string;
   new_items?: NewItem[];
 }

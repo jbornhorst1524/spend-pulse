@@ -1,13 +1,13 @@
 import { Command } from 'commander';
 import yaml from 'js-yaml';
 import {
-  getConfig,
+  getConfigWithMigration,
   getDefaultConfig,
   saveConfig,
-  getTransactions,
-  getMockTransactions,
-  saveTransactions,
-  computeSummary,
+  getOrCreateCurrentMonthData,
+  saveMonthlyData,
+  getMockMonthlyData,
+  computeSummaryFromMonthlyData,
   saveSummary,
   ensureVaultExists,
 } from '../vault.js';
@@ -16,23 +16,25 @@ import type { Summary } from '../types.js';
 export const statusCommand = new Command('status')
   .description('Show spending summary')
   .option('--oneline', 'Output a single-line human-readable summary')
-  .action((options) => {
+  .action(async (options) => {
     ensureVaultExists();
 
-    let config = getConfig();
+    let config = await getConfigWithMigration();
     if (!config) {
       config = getDefaultConfig();
       saveConfig(config);
     }
 
-    let transactions = getTransactions();
-    if (!transactions) {
-      // Use mock data for Phase 1
-      transactions = getMockTransactions();
-      saveTransactions(transactions);
+    // Get current month's data
+    let monthlyData = getOrCreateCurrentMonthData();
+
+    // If no transactions, use mock data for demo
+    if (monthlyData.transactions.length === 0) {
+      monthlyData = getMockMonthlyData();
+      saveMonthlyData(monthlyData);
     }
 
-    const summary = computeSummary(transactions, config.settings);
+    const summary = computeSummaryFromMonthlyData(monthlyData, config.settings);
     saveSummary(summary);
 
     if (options.oneline) {
@@ -56,10 +58,10 @@ function formatOneline(summary: Summary): string {
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const monthName = monthNames[month - 1];
 
-  const statusIcon = status === 'on_track' ? '✓' : status === 'watch' ? '⚠' : '✗';
+  const statusIcon = status === 'on_track' ? '>' : status === 'watch' ? '!' : 'X';
   const statusText = status === 'on_track' ? 'On track' : status === 'watch' ? 'Watch' : 'Over budget';
 
-  return `${monthName}: ${total} of ${target} (${percent}%) • ${remaining} left • ${days} days • ${statusIcon} ${statusText}`;
+  return `${monthName}: ${total} of ${target} (${percent}%) | ${remaining} left | ${days} days | ${statusIcon} ${statusText}`;
 }
 
 function formatMoney(amount: number): string {

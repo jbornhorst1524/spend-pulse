@@ -1,14 +1,14 @@
 import { Command } from 'commander';
 import yaml from 'js-yaml';
-import { getConfig, saveConfig, getDefaultConfig, ensureVaultExists, paths } from '../vault.js';
+import { getConfigWithMigration, saveConfig, getDefaultConfig, ensureVaultExists, paths } from '../vault.js';
 
 export const configCommand = new Command('config')
   .description('View or modify configuration')
   .argument('[key]', 'Configuration key to set (e.g., "target")')
   .argument('[value]', 'Value to set')
-  .action((key?: string, value?: string) => {
+  .action(async (key?: string, value?: string) => {
     ensureVaultExists();
-    let config = getConfig();
+    let config = await getConfigWithMigration();
 
     if (!config) {
       config = getDefaultConfig();
