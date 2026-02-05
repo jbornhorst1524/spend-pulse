@@ -13,13 +13,15 @@ Spend Pulse is a CLI tool that tracks credit card spending against a monthly bud
 
 The key insight: You don't need a dashboard. You need to know when you're off pace.
 
+## Prerequisites
+
+- **macOS** (required for Keychain credential storage and launchd scheduling)
+- **Node.js >= 18**
+- **Plaid developer account** (free sandbox mode available; production/development requires [Plaid approval](https://dashboard.plaid.com/))
+
 ## Installation
 
 ```bash
-# Install globally
-npm install -g spend-pulse
-
-# Or from source
 git clone https://github.com/jbornhorst1524/spend-pulse.git
 cd spend-pulse
 npm install && npm run build && npm link
@@ -161,7 +163,7 @@ Unlike simple threshold alerts ("you've spent 80%!"), spend-pulse tracks against
 - Spent 40%? You're **under pace**—doing great.
 - Spent 60%? You're **over pace**—heads up.
 
-This is the core insight from Amex SpendSmart, now available for AI consumption.
+This is the core insight: a single pace number tells you more than a spending total.
 
 ## Security
 
@@ -220,6 +222,8 @@ npm run build        # Compile TypeScript
 npm test             # Run test suite
 npm link             # Make spend-pulse available globally
 ```
+
+This is a personal project. Issues and feedback are welcome, but it's not actively seeking contributions.
 
 ## License
 

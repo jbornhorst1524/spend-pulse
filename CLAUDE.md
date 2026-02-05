@@ -12,33 +12,7 @@ Spend Pulse is a CLI tool (`spend-pulse`) that tracks credit card spending again
 
 ## Project Status
 
-**Current:** Feature complete. Awaiting Plaid production approval, then QA and publish.
-
-**Done:**
-- Basic CLI structure (Commander)
-- Plaid integration (setup, sync)
-- YAML storage (`~/.spend-pulse/`)
-- `spend-pulse check` with `should_alert` logic
-- `spend-pulse status` and `spend-pulse status --oneline`
-- `spend-pulse recent` command
-- Pace calculation
-- Secure credential storage (macOS Keychain via keytar)
-- Guided onboarding wizard (`spend-pulse setup`)
-- `spend-pulse setup --upgrade` for Sandbox → Development
-- `spend-pulse link` command for multi-account management
-- Monthly data files (2026-01.yaml format)
-- Enhanced check output matching spec
-- Launchd scheduling (`spend-pulse sync --schedule daily`)
-- Unit and integration test suite (54 tests, vitest)
-- package.json prepared for npm publish (files, engines, metadata)
-- Sandbox testing complete
-- OpenClaw integration validated (SKILL.md working)
-
-**Next up:**
-- Plaid production approval (pending)
-- QA with real bank data
-- Polish as needed
-- Publish to GitHub (public), npm, and OpenClaw skill directory
+Feature complete. Published to GitHub and used personally via OpenClaw.
 
 ## Architecture
 
@@ -186,11 +160,3 @@ See `SKILL.md` for the OpenClaw skill definition.
 - `.env` files
 - Any file with Plaid client_id, secret, or access_token values
 
-## Full Spec
-
-See `docs/spend-pulse-spec.md` for the complete product spec including:
-- Detailed Plaid integration plans
-- Keychain credential storage design
-- Guided onboarding UX
-- OpenClaw integration
-- Distribution strategy
