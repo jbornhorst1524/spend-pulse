@@ -1,3 +1,8 @@
+---
+name: spend-pulse
+description: Proactive spending alerts via Plaid. Track credit card spending against a monthly budget with pace-based alerts.
+---
+
 # Spend Pulse
 
 > Proactive spending alerts via Plaid. Track credit card spending against a monthly budget with pace-based alerts.

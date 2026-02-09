@@ -22,6 +22,11 @@ The key insight: You don't need a dashboard. You need to know when you're off pa
 ## Installation
 
 ```bash
+npm install -g spend-pulse
+```
+
+Or from source:
+```bash
 git clone https://github.com/jbornhorst1524/spend-pulse.git
 cd spend-pulse
 npm install && npm run build && npm link
