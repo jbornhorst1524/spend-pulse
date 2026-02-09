@@ -98,6 +98,7 @@ export interface Pace {
   diff: number;
   status: PaceStatus;
   percent_diff: number;
+  source?: 'last_month' | 'linear';
 }
 
 export interface Summary {
@@ -139,7 +140,9 @@ export interface CheckResult {
   pace_delta: number;
   pace_percent: number;
   oneline: string;
+  pace_source?: 'last_month' | 'linear';
   new_transactions: number;
   last_check?: string;
   new_items?: NewItem[];
+  chart_path?: string;
 }

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import yaml from 'js-yaml';
+import path from 'path';
 import {
   getConfigWithMigration,
   getDefaultConfig,
@@ -13,12 +14,17 @@ import {
   ensureVaultExists,
   updateMonthlyLastCheck,
   getCurrentMonth,
+  getPreviousMonth,
+  getMonthlyData,
+  buildCumulativeSpendCurve,
+  paths,
 } from '../vault.js';
 import type { Summary, CheckResult, NewItem, MonthlyData } from '../types.js';
 
 export const checkCommand = new Command('check')
   .description('Check if a spending alert should be sent')
-  .action(async () => {
+  .option('--chart', 'Generate a spending chart PNG')
+  .action(async (options) => {
     ensureVaultExists();
 
     let config = await getConfigWithMigration();
@@ -36,7 +42,12 @@ export const checkCommand = new Command('check')
       saveMonthlyData(monthlyData);
     }
 
-    const summary = computeSummaryFromMonthlyData(monthlyData, config.settings);
+    // Load last month's data and build cumulative spend curve
+    const prevMonth = getPreviousMonth(monthlyData.month);
+    const lastMonthData = getMonthlyData(prevMonth);
+    const lastMonthCurve = lastMonthData ? buildCumulativeSpendCurve(lastMonthData) : null;
+
+    const summary = computeSummaryFromMonthlyData(monthlyData, config.settings, lastMonthCurve);
     saveSummary(summary);
 
     const syncResult = getSyncResult();
@@ -88,19 +99,14 @@ export const checkCommand = new Command('check')
 
     const shouldAlert = reasons.length > 0;
 
-    // Calculate pace values
+    // Derive pace values from summary (single source of truth)
     const daysInMonth = summary.period.days_elapsed + summary.period.days_remaining;
-    const expectedSpend = (summary.period.days_elapsed / daysInMonth) * config.settings.monthly_target;
-    const paceDelta = summary.spending.total - expectedSpend;
-    const pacePercent = expectedSpend > 0 ? Math.round((paceDelta / expectedSpend) * 100) : 0;
-
-    // Determine pace status
-    let paceStatus: 'under' | 'on_track' | 'over' = 'on_track';
-    if (paceDelta < -expectedSpend * 0.05) {
-      paceStatus = 'under';
-    } else if (paceDelta > expectedSpend * 0.05) {
-      paceStatus = 'over';
-    }
+    const paceStatusMap: Record<string, 'under' | 'on_track' | 'over'> = {
+      ahead: 'under',
+      on_pace: 'on_track',
+      behind: 'over',
+    };
+    const paceStatus = paceStatusMap[summary.pace.status] ?? 'on_track';
 
     // Format oneline
     const oneline = formatOneline(summary);
@@ -115,15 +121,39 @@ export const checkCommand = new Command('check')
       day_of_month: summary.period.days_elapsed,
       days_in_month: daysInMonth,
       days_remaining: summary.period.days_remaining,
-      expected_spend: Math.round(expectedSpend * 100) / 100,
+      expected_spend: summary.pace.expected,
       pace: paceStatus,
-      pace_delta: Math.round(paceDelta * 100) / 100,
-      pace_percent: pacePercent,
+      pace_delta: summary.pace.diff,
+      pace_percent: Math.round(summary.pace.percent_diff),
+      pace_source: summary.pace.source,
       oneline,
       new_transactions: newTransactionCount,
       ...(monthlyData.last_check && { last_check: monthlyData.last_check }),
       ...(newItems.length > 0 && { new_items: newItems }),
     };
+
+    // Generate chart if requested
+    if (options.chart) {
+      const { renderSpendingChart } = await import('../lib/chart.js');
+      const fs = await import('fs');
+
+      const currentCurve = buildCumulativeSpendCurve(monthlyData);
+      const chartPath = path.join(paths.vault, 'chart.png');
+
+      const png = await renderSpendingChart({
+        currentMonthCurve: currentCurve,
+        lastMonthCurve,
+        monthlyTarget: config.settings.monthly_target,
+        currentDay: summary.period.days_elapsed,
+        daysInMonth,
+        spent: summary.spending.total,
+        remaining: summary.spending.remaining,
+        monthLabel: monthlyData.month,
+      });
+
+      fs.writeFileSync(chartPath, png);
+      result.chart_path = chartPath;
+    }
 
     // Update last_check timestamp
     updateMonthlyLastCheck(getCurrentMonth());

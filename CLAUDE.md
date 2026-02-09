@@ -1,162 +1,74 @@
-# CLAUDE.md - Spend Pulse
+# CLAUDE.md
 
-> Proactive spending alerts via Plaid. Set your budget, forget about it. Your AI texts you when you need to know.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What This Is
 
-Spend Pulse is a CLI tool (`spend-pulse`) that tracks credit card spending against a monthly budget and outputs structured data for AI assistants. It's designed for the "AI runs this on cron" use case, not the "human checks a dashboard" use case.
+Spend Pulse is a CLI tool (`spend-pulse`) that tracks credit card spending against a monthly budget and outputs structured YAML for AI assistants. Designed for the "AI runs this on cron" use case via [OpenClaw](https://openclaw.ai/) integration, not human dashboards. The core value is one number: pace (where you are vs. where you should be).
 
-**Standalone CLI + OpenClaw Integration:** While spend-pulse works as a standalone CLI, its intended use is as an [OpenClaw](https://openclaw.ai/) skill. OpenClaw handles the cron scheduling, message composition, and delivery via iMessage/WhatsApp/Telegram—spend-pulse just provides the spending data and alert decisions.
+## Build & Test Commands
 
-**The key insight:** SpendSmart's value is one number—where you are vs. where you should be (pace). Everything else is gravy.
+```bash
+npm install              # Install dependencies
+npm run build            # Compile TypeScript (tsc)
+npm test                 # Run all tests (vitest)
+npm run test:watch       # Watch mode
+npm run test:coverage    # With coverage report
+npm link                 # Make spend-pulse available globally
+```
 
-## Project Status
+Run a single test file:
+```bash
+npx vitest run tests/vault.test.ts
+```
 
-Feature complete. Published to GitHub and used personally via OpenClaw.
+Run tests matching a pattern:
+```bash
+npx vitest run -t "getPreviousMonth"
+```
 
 ## Architecture
 
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌─────────────┐
-│    Plaid    │────▶│ spend-pulse  │────▶│  Local Data │────▶│  OpenClaw   │
-│  (Bank API) │     │    (CLI)     │     │   (YAML)    │     │  (AI Agent) │
-└─────────────┘     └──────────────┘     └─────────────┘     └─────────────┘
-                           │                                       │
-                           │         ┌─────────────────────────────┘
-                           │         │
-                           ▼         ▼
-                 spend-pulse sync   OpenClaw cron
-                    (daily)         (every 2 days → iMessage/WhatsApp)
-```
+### Data Flow
 
-**Flow:**
-1. `spend-pulse sync` pulls transactions from Plaid (daily via launchd)
-2. OpenClaw runs `spend-pulse check` on a cron schedule
-3. If `should_alert: true`, OpenClaw composes and sends a message via your preferred channel
-4. If `should_alert: false`, OpenClaw stays quiet
+`spend-pulse sync` pulls from Plaid → stores in `~/.spend-pulse/data/YYYY-MM.yaml` → `spend-pulse check` computes pace against last month's curve → outputs `should_alert` + context as YAML → OpenClaw sends a message if needed.
 
-## Data Storage
+### Module Structure
 
-```
-~/.spend-pulse/
-  config.yaml           # Budget, settings, Plaid item metadata (no credentials)
-  data/
-    2026-01.yaml        # Monthly transaction data
-    summary.yaml        # Computed spending summary
-    sync_result.yaml    # Last sync metadata
-```
+- **`src/vault.ts`** — The data layer. Reads/writes YAML files, computes summaries, builds cumulative spend curves. All file I/O and financial calculations live here. This is the largest module.
+- **`src/types.ts`** — All TypeScript interfaces. Key types: `MonthlyData` (per-month transaction store), `Summary` (computed spending analysis), `CheckResult` (alert decision output), `Pace` (pace tracking with `source` indicating curve vs linear).
+- **`src/commands/*.ts`** — Each CLI command is a Commander `Command` exported from its own file and registered in `src/index.ts`.
+- **`src/lib/keychain.ts`** — Wraps `keytar` for macOS Keychain storage of Plaid credentials.
+- **`src/lib/chart.ts`** — Renders a cumulative spending PNG chart via `chart.js` + `chartjs-node-canvas`.
+- **`src/plaid.ts`** — Plaid SDK client wrapper.
 
-**Credentials:** Stored securely in macOS Keychain via `keytar`:
-- `spend-pulse` → `plaid-client-id`
-- `spend-pulse` → `plaid-secret`
-- `spend-pulse` → `plaid-access-token-<item_id>`
+### Pace System
 
-## CLI Commands
+Pace is computed against **last month's actual cumulative spend curve** when available, falling back to a linear ramp. This prevents false "over pace" alerts from recurring bills that hit early in the month.
 
-| Command | Purpose |
-|---------|---------|
-| `spend-pulse check` | **Primary command.** Returns `should_alert` + full context for AI |
-| `spend-pulse sync` | Pull latest transactions from Plaid |
-| `spend-pulse sync --schedule daily` | Set up automated daily sync via launchd |
-| `spend-pulse sync --status` | Show sync schedule status |
-| `spend-pulse status` | Full spending summary as YAML |
-| `spend-pulse status --oneline` | Quick one-liner summary |
-| `spend-pulse recent [--days N]` | Recent transactions |
-| `spend-pulse config [key] [value]` | View/set configuration |
-| `spend-pulse setup` | Interactive setup wizard |
-| `spend-pulse setup --upgrade` | Upgrade from Sandbox to Development mode |
-| `spend-pulse link` | Add another bank account |
-| `spend-pulse link --status` | Show linked accounts |
-| `spend-pulse link --remove <id>` | Remove a linked account |
+Key functions in `vault.ts`:
+- `buildCumulativeSpendCurve()` — builds a `Map<day, cumulativeTotal>` from a month's transactions
+- `getExpectedSpendFromCurve()` — looks up expected spend for a given day, returns `{ expected, source }` where source is `'last_month'` or `'linear'`
+- `computeSummaryFromMonthlyData()` — accepts an optional `lastMonthCurve` parameter
 
-## Key Files
+The `Pace` interface has a `source` field (`'last_month' | 'linear'`) that propagates through to `CheckResult.pace_source`.
 
-| File | Purpose |
-|------|---------|
-| `src/index.ts` | CLI entry point (Commander setup) |
-| `src/vault.ts` | Data persistence, paths, summary computation, monthly files |
-| `src/plaid.ts` | Plaid client wrapper |
-| `src/types.ts` | TypeScript interfaces |
-| `src/lib/keychain.ts` | Secure credential storage via keytar |
-| `src/lib/scheduler.ts` | Launchd plist generation for automated sync |
-| `src/commands/check.ts` | The money command—alert decision logic |
-| `src/commands/sync.ts` | Plaid transaction sync + scheduling |
-| `src/commands/setup.ts` | Interactive setup wizard |
-| `src/commands/link.ts` | Multi-account management |
-| `tests/` | Unit and integration tests (vitest) |
-| `SKILL.md` | OpenClaw skill definition |
+### Data Storage
 
-## Building & Running
+All data lives in `~/.spend-pulse/`. Config and transaction data are YAML files. Credentials are in macOS Keychain (never in files). Monthly transaction files are named `YYYY-MM.yaml`. There is a legacy `transactions.yaml` format that auto-migrates.
 
-```bash
-npm install
-npm run build        # Compile TypeScript
-npm link             # Make spend-pulse available globally
+### Testing Patterns
 
-spend-pulse --help   # Test it works
-```
-
-## Testing
-
-```bash
-npm test              # Run all tests (54 tests)
-npm run test:watch    # Watch mode
-npm run test:coverage # With coverage report
-```
-
-## Pace Calculation
-
-The tool tracks spending against a **linear budget ramp**:
-
+Tests mock `keytar` (Keychain) since it requires macOS Keychain access:
 ```typescript
-expectedSpend = (dayOfMonth / daysInMonth) * monthlyTarget
-paceDelta = actualSpend - expectedSpend
-// Negative = under pace (good), Positive = over pace (concerning)
+vi.mock('../src/lib/keychain.js', () => ({
+  setPlaidCredentials: vi.fn(),
+  // ...
+}));
 ```
 
-**Pace statuses:** `under` | `on_track` | `over`
-
-## Alert Logic
-
-`should_alert: true` when any of:
-- New transactions since last check
-- Over pace (spending faster than linear ramp)
-- Remaining budget < $500
-- End of month (last 3 days)
-- First of month (fresh start)
-
-## Tech Stack
-
-- **Language:** TypeScript
-- **Runtime:** Node.js
-- **CLI:** Commander
-- **Storage:** YAML (js-yaml)
-- **Bank API:** Plaid (plaid-node SDK)
-- **Credentials:** keytar (macOS Keychain)
-- **Prompts:** prompts (interactive CLI)
-- **Scheduling:** launchd (macOS)
-- **Testing:** vitest
-
-## OpenClaw Integration
-
-Spend Pulse is designed as an OpenClaw skill. OpenClaw is an open-source personal AI assistant that:
-- Runs locally on your machine
-- Connects via iMessage, WhatsApp, Telegram, Discord, etc.
-- Handles cron scheduling for periodic checks
-- Composes natural language messages from structured data
-
-See `SKILL.md` for the OpenClaw skill definition.
+When no real transaction data exists, commands fall back to `getMockMonthlyData()` for demo purposes.
 
 ## Security
 
-**Credentials are secure:**
-- Plaid API keys stored in macOS Keychain (not files)
-- Access tokens stored per-item in Keychain
-- Config files contain no secrets
-- Legacy configs auto-migrate to Keychain on first run
-
-**Never commit:**
-- `~/.spend-pulse/` contents
-- `.env` files
-- Any file with Plaid client_id, secret, or access_token values
-
+Plaid credentials (client_id, secret, access tokens) are stored in macOS Keychain via `keytar`, never in config files. Never commit `~/.spend-pulse/` contents or `.env` files.

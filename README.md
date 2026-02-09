@@ -74,16 +74,23 @@ remaining: 1198.71
 day_of_month: 30
 days_in_month: 31
 days_remaining: 1
-expected_spend: 7741.94
+expected_spend: 7200.00
 pace: under
-pace_delta: -940.65
-pace_percent: -12
+pace_delta: -398.71
+pace_percent: -6
+pace_source: last_month
 oneline: "Jan: $6.8k of $8k (85%) | $1.2k left | 1 days | > On track"
 new_transactions: 3
 new_items:
   - merchant: Whole Foods
     amount: 47.50
     category: Groceries
+```
+
+Use `--chart` to also generate a spending chart PNG:
+```bash
+spend-pulse check --chart
+# adds chart_path to YAML output
 ```
 
 **Alert triggers** (`should_alert: true` when any apply):
@@ -135,6 +142,15 @@ spend-pulse config target 8000      # set monthly budget
 spend-pulse config timezone America/Chicago
 ```
 
+### `spend-pulse chart [-o <path>]`
+
+Generate a cumulative spending chart as a PNG image showing current month vs. last month vs. budget target.
+
+```bash
+spend-pulse chart                    # Writes to ~/.spend-pulse/chart.png
+spend-pulse chart -o /tmp/chart.png  # Custom output path
+```
+
 ### `spend-pulse link [--status] [--remove <id>]`
 
 Manage linked bank accounts:
@@ -157,13 +173,13 @@ This clears sandbox data and connects your real bank account.
 
 ## Pace Tracking
 
-Unlike simple threshold alerts ("you've spent 80%!"), spend-pulse tracks against a **linear budget ramp**:
+Unlike simple threshold alerts ("you've spent 80%!"), spend-pulse paces against **last month's actual cumulative spend curve**:
 
-- Day 15 of 30? You should have spent ~50% of budget.
-- Spent 40%? You're **under pace**—doing great.
-- Spent 60%? You're **over pace**—heads up.
+- Day 15, last month you'd spent $4.2k by now → expected ~$4.2k
+- Spent $3.5k? You're **under pace** — doing great.
+- Spent $5k? You're **over pace** — heads up.
 
-This is the core insight: a single pace number tells you more than a spending total.
+This means early-month bills (rent, subscriptions) won't trigger false alerts if you had similar bills last month. Falls back to a linear budget ramp when no prior month data exists. Check `pace_source` in the output to see which mode is active.
 
 ## Security
 
@@ -200,9 +216,9 @@ Spend Pulse is designed as an [OpenClaw](https://openclaw.ai/) skill. See [SKILL
 
 Typical OpenClaw workflow:
 ```bash
-spend-pulse sync    # Pull latest from bank
-spend-pulse check   # Get alert decision
-# If should_alert: true → OpenClaw composes and sends you a message
+spend-pulse sync          # Pull latest from bank
+spend-pulse check --chart # Get alert decision + chart image
+# If should_alert: true → OpenClaw composes a message and attaches chart.png
 ```
 
 ## Tech Stack
@@ -213,6 +229,7 @@ spend-pulse check   # Get alert decision
 - [Commander](https://github.com/tj/commander.js) for CLI
 - [prompts](https://github.com/terkelg/prompts) for interactive setup
 - [js-yaml](https://github.com/nodeca/js-yaml) for data storage
+- [chart.js](https://www.chartjs.org/) + [chartjs-node-canvas](https://github.com/SeanSobey/ChartjsNodeCanvas) for spending chart generation
 
 ## Development
 

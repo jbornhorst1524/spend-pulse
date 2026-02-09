@@ -21,6 +21,9 @@ const {
   computeSummaryFromMonthlyData,
   addTransactionsToMonthlyData,
   getCurrentMonth,
+  getPreviousMonth,
+  buildCumulativeSpendCurve,
+  getExpectedSpendFromCurve,
 } = vaultModule;
 
 describe('vault', () => {
@@ -198,6 +201,148 @@ describe('vault', () => {
       const summary = computeSummaryFromMonthlyData(monthlyData, settings);
 
       expect(summary.status).toBe('over');
+    });
+
+    it('should use linear ramp when no curve provided', () => {
+      const monthlyData: MonthlyData = {
+        month: getCurrentMonth(),
+        last_sync: new Date().toISOString(),
+        transactions: [
+          { id: 'tx1', date: new Date().toISOString().split('T')[0], amount: 100, merchant: 'A', category: 'Food' },
+        ],
+      };
+
+      const summary = computeSummaryFromMonthlyData(monthlyData, settings);
+      expect(summary.pace.source).toBe('linear');
+    });
+
+    it('should use last month curve when provided', () => {
+      const monthlyData: MonthlyData = {
+        month: getCurrentMonth(),
+        last_sync: new Date().toISOString(),
+        transactions: [
+          { id: 'tx1', date: new Date().toISOString().split('T')[0], amount: 100, merchant: 'A', category: 'Food' },
+        ],
+      };
+
+      // Build a simple curve where every day has $50
+      const curve = new Map<number, number>();
+      for (let d = 1; d <= 31; d++) {
+        curve.set(d, d * 50);
+      }
+
+      const summary = computeSummaryFromMonthlyData(monthlyData, settings, curve);
+      expect(summary.pace.source).toBe('last_month');
+    });
+  });
+
+  describe('getPreviousMonth', () => {
+    it('should return previous month', () => {
+      expect(getPreviousMonth('2026-06')).toBe('2026-05');
+      expect(getPreviousMonth('2026-12')).toBe('2026-11');
+    });
+
+    it('should handle January → December year wrap', () => {
+      expect(getPreviousMonth('2026-01')).toBe('2025-12');
+    });
+
+    it('should handle single-digit months with padding', () => {
+      expect(getPreviousMonth('2026-03')).toBe('2026-02');
+    });
+  });
+
+  describe('buildCumulativeSpendCurve', () => {
+    it('should build cumulative spend by day', () => {
+      const monthlyData: MonthlyData = {
+        month: '2026-01',
+        last_sync: '2026-01-31T00:00:00Z',
+        transactions: [
+          { id: 'tx1', date: '2026-01-01', amount: 100, merchant: 'A', category: 'X' },
+          { id: 'tx2', date: '2026-01-01', amount: 50, merchant: 'B', category: 'Y' },
+          { id: 'tx3', date: '2026-01-05', amount: 200, merchant: 'C', category: 'Z' },
+          { id: 'tx4', date: '2026-01-10', amount: 300, merchant: 'D', category: 'W' },
+        ],
+      };
+
+      const curve = buildCumulativeSpendCurve(monthlyData);
+
+      expect(curve.get(1)).toBe(150);    // 100 + 50
+      expect(curve.get(2)).toBe(150);    // carry forward
+      expect(curve.get(5)).toBe(350);    // 150 + 200
+      expect(curve.get(10)).toBe(650);   // 350 + 300
+      expect(curve.get(31)).toBe(650);   // carry forward to end
+    });
+
+    it('should handle empty transactions', () => {
+      const monthlyData: MonthlyData = {
+        month: '2026-01',
+        last_sync: '2026-01-31T00:00:00Z',
+        transactions: [],
+      };
+
+      const curve = buildCumulativeSpendCurve(monthlyData);
+
+      expect(curve.size).toBe(31); // all days of January
+      expect(curve.get(1)).toBe(0);
+      expect(curve.get(31)).toBe(0);
+    });
+
+    it('should cover all days in the month', () => {
+      const monthlyData: MonthlyData = {
+        month: '2026-02',  // February 2026 has 28 days
+        last_sync: '2026-02-28T00:00:00Z',
+        transactions: [
+          { id: 'tx1', date: '2026-02-15', amount: 100, merchant: 'A', category: 'X' },
+        ],
+      };
+
+      const curve = buildCumulativeSpendCurve(monthlyData);
+
+      expect(curve.size).toBe(28);
+      expect(curve.get(14)).toBe(0);
+      expect(curve.get(15)).toBe(100);
+      expect(curve.get(28)).toBe(100);
+    });
+  });
+
+  describe('getExpectedSpendFromCurve', () => {
+    it('should return linear ramp when curve is null', () => {
+      const result = getExpectedSpendFromCurve(15, 30, null, 6000);
+
+      expect(result.source).toBe('linear');
+      expect(result.expected).toBe(3000); // 15/30 * 6000
+    });
+
+    it('should return linear ramp when curve is empty', () => {
+      const result = getExpectedSpendFromCurve(15, 30, new Map(), 6000);
+
+      expect(result.source).toBe('linear');
+      expect(result.expected).toBe(3000);
+    });
+
+    it('should return curve value when day exists', () => {
+      const curve = new Map<number, number>();
+      curve.set(10, 2500);
+      curve.set(15, 4000);
+      curve.set(20, 5500);
+
+      const result = getExpectedSpendFromCurve(15, 30, curve, 6000);
+
+      expect(result.source).toBe('last_month');
+      expect(result.expected).toBe(4000);
+    });
+
+    it('should cap at last month final total when current month is longer', () => {
+      // Last month had 28 days, current has 31
+      const curve = new Map<number, number>();
+      for (let d = 1; d <= 28; d++) {
+        curve.set(d, d * 100);
+      }
+
+      const result = getExpectedSpendFromCurve(30, 31, curve, 6000);
+
+      expect(result.source).toBe('last_month');
+      expect(result.expected).toBe(2800); // capped at day 28 value
     });
   });
 });

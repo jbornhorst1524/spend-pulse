@@ -61,10 +61,11 @@ remaining: 1198.71
 day_of_month: 30
 days_in_month: 31
 days_remaining: 1
-expected_spend: 7741.94
+expected_spend: 7200.00
 pace: under
-pace_delta: -940.65
-pace_percent: -12
+pace_delta: -398.71
+pace_percent: -6
+pace_source: last_month
 oneline: "Jan: $6.8k of $8k (85%) | $1.2k left | 1 days | > On track"
 new_transactions: 3
 new_items:
@@ -125,52 +126,84 @@ spend-pulse link             # add another account
 spend-pulse link --remove <item_id>
 ```
 
+### `spend-pulse chart [-o <path>]`
+
+Generate a cumulative spending chart as a PNG image showing:
+- Current month spending (solid blue line with gradient fill, ends with a dot at today)
+- Last month spending (dashed gray line, full month)
+- Budget target (dashed amber horizontal line)
+
+```bash
+spend-pulse chart                    # Writes to ~/.spend-pulse/chart.png
+spend-pulse chart -o /tmp/chart.png  # Custom output path
+```
+
+Outputs the file path to stdout so you can capture it and attach to messages.
+
+### `spend-pulse check --chart`
+
+Generate a chart alongside the alert check. Adds `chart_path` to the YAML output:
+
+```yaml
+should_alert: true
+chart_path: /Users/you/.spend-pulse/chart.png
+# ... rest of check output
+```
+
 ## Recommended Workflow
 
 ```bash
 # 1. Sync latest transactions
 spend-pulse sync
 
-# 2. Check if alert needed
-spend-pulse check
+# 2. Check if alert needed, generate chart
+spend-pulse check --chart
 ```
 
-**If `should_alert: true`**: Compose a brief, friendly spending update using the data.
+**If `should_alert: true`**: Compose a brief, friendly spending update using the data. **Attach the chart image** from `chart_path` — it shows current vs. last month spending at a glance.
 
 **If `should_alert: false`**: Stay quiet unless the user asks about spending.
 
 ## Composing Messages
 
-Use the `oneline` field as the core message, then add context:
+Use the `oneline` field as the core message, then add context. Always attach the chart image when available — it communicates pace visually better than any text can.
 
 **Under pace (positive):**
-> "Quick spending pulse: Jan at $6.8k of $8k, $1.2k left with 1 day to go. Under pace by 12%—nice work!"
+> "Quick spending pulse: Jan at $6.8k of $8k, $1.2k left with 1 day to go. Under pace by 12% — nice work!"
+> [attach chart.png]
 
 **On track:**
 > "January update: $5.5k of $8k (69%) with 10 days left. Right on pace. Recent: $125 Amazon, $47 Whole Foods."
+> [attach chart.png]
 
 **Over pace (heads up):**
-> "Heads up—January's at $7.2k of $8k with 5 days to go. About 10% over pace. The travel charges added up."
+> "Heads up — January's at $7.2k of $8k with 5 days to go. About 10% over pace. The travel charges added up."
+> [attach chart.png]
 
 **Over budget:**
 > "January budget: $8.5k spent, about $500 over the $8k target. Something to keep in mind for February."
+> [attach chart.png]
 
 **Guidelines:**
 - Tone: helpful friend, not nagging accountant
-- Keep under 280 characters when possible
+- Keep text under 280 characters when possible
 - Mention 1-2 notable items from `new_items` if interesting
 - Use `reasons` array for context
+- Always include the chart image — it's designed to be readable on a phone screen
 
 ## Pace Explained
 
-Spend Pulse tracks against a **linear budget ramp**:
+Spend Pulse paces against **last month's actual cumulative spend curve** when available, falling back to a linear budget ramp when no prior month data exists.
 
-- `expected_spend`: Where you "should" be spending evenly through month
+- `expected_spend`: Where you were at this point last month (or linear ramp fallback)
 - `spent`: Actual spending
 - `pace_delta`: Difference (negative = under, positive = over)
 - `pace`: `under` | `on_track` | `over`
+- `pace_source`: `last_month` (curve-based) or `linear` (ramp fallback)
 
-Example: Day 15 of 30 with $8k budget → expected ~$4k spent.
+This means early-month bills (rent, subscriptions) won't trigger false "over pace" alerts if you had similar bills last month.
+
+Example: Day 15, last month you'd spent $4.2k by this point → expected ~$4.2k.
 
 ## Scheduling (Optional)
 

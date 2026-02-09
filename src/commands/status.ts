@@ -10,6 +10,9 @@ import {
   computeSummaryFromMonthlyData,
   saveSummary,
   ensureVaultExists,
+  getPreviousMonth,
+  getMonthlyData,
+  buildCumulativeSpendCurve,
 } from '../vault.js';
 import type { Summary } from '../types.js';
 
@@ -34,7 +37,12 @@ export const statusCommand = new Command('status')
       saveMonthlyData(monthlyData);
     }
 
-    const summary = computeSummaryFromMonthlyData(monthlyData, config.settings);
+    // Load last month's data and build cumulative spend curve
+    const prevMonth = getPreviousMonth(monthlyData.month);
+    const lastMonthData = getMonthlyData(prevMonth);
+    const lastMonthCurve = lastMonthData ? buildCumulativeSpendCurve(lastMonthData) : null;
+
+    const summary = computeSummaryFromMonthlyData(monthlyData, config.settings, lastMonthCurve);
     saveSummary(summary);
 
     if (options.oneline) {

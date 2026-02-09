@@ -298,9 +298,90 @@ export function getNewTransactionsSinceLastCheck(monthlyData: MonthlyData): Tran
 }
 
 /**
+ * Get the previous month string in "YYYY-MM" format
+ * Handles year wrap (e.g., 2026-01 → 2025-12)
+ */
+export function getPreviousMonth(month?: string): string {
+  const ref = month ?? getCurrentMonth();
+  const [year, mon] = ref.split('-').map(Number);
+  if (mon === 1) {
+    return `${year - 1}-12`;
+  }
+  return `${year}-${(mon - 1).toString().padStart(2, '0')}`;
+}
+
+/**
+ * Build a day-by-day cumulative spend map from a month's transactions.
+ * Days with no transactions carry forward the previous day's value (step function).
+ */
+export function buildCumulativeSpendCurve(monthlyData: MonthlyData): Map<number, number> {
+  const [year, monthNum] = monthlyData.month.split('-').map(Number);
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+
+  // Group transaction amounts by day-of-month
+  const dailySpend = new Map<number, number>();
+  for (const t of monthlyData.transactions) {
+    const day = parseInt(t.date.split('-')[2], 10);
+    dailySpend.set(day, (dailySpend.get(day) ?? 0) + t.amount);
+  }
+
+  // Walk day 1→N accumulating a running total
+  const curve = new Map<number, number>();
+  let running = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    running += dailySpend.get(d) ?? 0;
+    curve.set(d, Math.round(running * 100) / 100);
+  }
+
+  return curve;
+}
+
+/**
+ * Get expected spend for the current day from last month's curve.
+ * Falls back to linear ramp if curve is null/empty.
+ */
+export function getExpectedSpendFromCurve(
+  dayOfMonth: number,
+  daysInCurrentMonth: number,
+  lastMonthCurve: Map<number, number> | null,
+  monthlyTarget: number,
+): { expected: number; source: 'last_month' | 'linear' } {
+  // Fall back to linear ramp if no curve data
+  if (!lastMonthCurve || lastMonthCurve.size === 0) {
+    return {
+      expected: (dayOfMonth / daysInCurrentMonth) * monthlyTarget,
+      source: 'linear',
+    };
+  }
+
+  // If day exists in curve, use it
+  if (lastMonthCurve.has(dayOfMonth)) {
+    return {
+      expected: lastMonthCurve.get(dayOfMonth)!,
+      source: 'last_month',
+    };
+  }
+
+  // If current month is longer than last month, cap at last month's final total
+  const maxDay = Math.max(...lastMonthCurve.keys());
+  if (dayOfMonth > maxDay) {
+    return {
+      expected: lastMonthCurve.get(maxDay)!,
+      source: 'last_month',
+    };
+  }
+
+  // Should not happen since curve is built for all days, but fallback
+  return {
+    expected: (dayOfMonth / daysInCurrentMonth) * monthlyTarget,
+    source: 'linear',
+  };
+}
+
+/**
  * Compute summary from monthly data
  */
-export function computeSummaryFromMonthlyData(monthlyData: MonthlyData, settings: Settings): Summary {
+export function computeSummaryFromMonthlyData(monthlyData: MonthlyData, settings: Settings, lastMonthCurve?: Map<number, number> | null): Summary {
   const now = new Date();
   const [year, monthNum] = monthlyData.month.split('-').map(Number);
 
@@ -322,8 +403,10 @@ export function computeSummaryFromMonthlyData(monthlyData: MonthlyData, settings
   const percentUsed = (total / settings.monthly_target) * 100;
   const dailyAverage = dayOfMonth > 0 ? total / dayOfMonth : 0;
 
-  // Calculate pace against linear ramp
-  const expectedSpend = (dayOfMonth / daysInMonth) * settings.monthly_target;
+  // Calculate pace against last month's curve (or linear ramp fallback)
+  const { expected: expectedSpend, source: paceSource } = getExpectedSpendFromCurve(
+    dayOfMonth, daysInMonth, lastMonthCurve ?? null, settings.monthly_target,
+  );
   const paceDiff = total - expectedSpend;
   const pacePercentDiff = expectedSpend > 0 ? (paceDiff / expectedSpend) * 100 : 0;
 
@@ -340,6 +423,7 @@ export function computeSummaryFromMonthlyData(monthlyData: MonthlyData, settings
     diff: Math.round(paceDiff * 100) / 100,
     status: paceStatus,
     percent_diff: Math.round(pacePercentDiff * 10) / 10,
+    source: paceSource,
   };
 
   // Determine status
@@ -456,7 +540,7 @@ export function saveSyncResult(result: SyncResult): void {
   writeYaml(paths.syncResult, result);
 }
 
-export function computeSummary(transactions: TransactionsData, settings: Settings): Summary {
+export function computeSummary(transactions: TransactionsData, settings: Settings, lastMonthCurve?: Map<number, number> | null): Summary {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
@@ -480,8 +564,10 @@ export function computeSummary(transactions: TransactionsData, settings: Setting
   const percentUsed = (total / settings.monthly_target) * 100;
   const dailyAverage = dayOfMonth > 0 ? total / dayOfMonth : 0;
 
-  // Calculate pace against linear ramp
-  const expectedSpend = (dayOfMonth / daysInMonth) * settings.monthly_target;
+  // Calculate pace against last month's curve (or linear ramp fallback)
+  const { expected: expectedSpend, source: paceSource } = getExpectedSpendFromCurve(
+    dayOfMonth, daysInMonth, lastMonthCurve ?? null, settings.monthly_target,
+  );
   const paceDiff = total - expectedSpend;
   const pacePercentDiff = expectedSpend > 0 ? (paceDiff / expectedSpend) * 100 : 0;
 
@@ -498,6 +584,7 @@ export function computeSummary(transactions: TransactionsData, settings: Setting
     diff: Math.round(paceDiff * 100) / 100,
     status: paceStatus,
     percent_diff: Math.round(pacePercentDiff * 10) / 10,
+    source: paceSource,
   };
 
   // Determine status
