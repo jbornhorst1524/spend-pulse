@@ -210,17 +210,6 @@ This means early-month bills (rent, subscriptions) won't trigger false "over pac
 
 Example: Day 15, last month you'd spent $4.2k by this point → expected ~$4.2k.
 
-## Scheduling (Optional)
-
-Set up automated daily sync via launchd:
-
-```bash
-spend-pulse sync --schedule daily      # Install daily sync at 9am
-spend-pulse sync --schedule 18:00      # Or specific time
-spend-pulse sync --status              # Check schedule
-spend-pulse sync --unschedule          # Remove schedule
-```
-
 ## Upgrading to Real Bank Data
 
 After testing with Sandbox, upgrade to Development mode for real transactions:
