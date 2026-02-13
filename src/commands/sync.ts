@@ -177,6 +177,8 @@ async function runSync(daysArg: string): Promise<void> {
       amount: t.amount, // Plaid uses positive for debits
       merchant: t.merchant_name || t.name,
       category: t.personal_finance_category?.primary || t.category?.[0] || 'Uncategorized',
+      pending: t.pending,
+      pending_transaction_id: t.pending_transaction_id ?? undefined,
     }));
 
     // Group transactions by month

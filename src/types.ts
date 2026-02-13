@@ -46,6 +46,8 @@ export interface Transaction {
   amount: number;
   merchant: string;
   category: string;
+  pending?: boolean;
+  pending_transaction_id?: string;  // Links posted transaction to its pending version
 }
 
 export interface TransactionsData {

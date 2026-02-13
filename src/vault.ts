@@ -243,24 +243,43 @@ export function getOrCreateCurrentMonthData(): MonthlyData {
 
 /**
  * Add transactions to monthly data, deduplicating by transaction ID
+ * Also handles pending→posted transitions using pending_transaction_id
  */
 export function addTransactionsToMonthlyData(
   monthlyData: MonthlyData,
   newTransactions: Transaction[]
 ): { added: number; updated: MonthlyData } {
   const existingIds = new Set(monthlyData.transactions.map(t => t.id));
-  const toAdd = newTransactions.filter(t => !existingIds.has(t.id));
+  
+  // Find pending transaction IDs that are being replaced by posted versions
+  const pendingIdsToRemove = new Set<string>();
+  for (const t of newTransactions) {
+    if (t.pending_transaction_id && !t.pending) {
+      // This is a posted transaction that replaces a pending one
+      pendingIdsToRemove.add(t.pending_transaction_id);
+    }
+  }
+  
+  // Filter out pending transactions that are being replaced
+  const existingFiltered = monthlyData.transactions.filter(t => !pendingIdsToRemove.has(t.id));
+  
+  // Update existingIds to reflect removals
+  const filteredIds = new Set(existingFiltered.map(t => t.id));
+  
+  // Add new transactions that aren't already present
+  const toAdd = newTransactions.filter(t => !filteredIds.has(t.id));
 
   const updated: MonthlyData = {
     ...monthlyData,
     last_sync: new Date().toISOString(),
     transactions: [
-      ...monthlyData.transactions,
+      ...existingFiltered,
       ...toAdd,
     ].sort((a, b) => b.date.localeCompare(a.date)),
   };
 
-  return { added: toAdd.length, updated };
+  const removed = monthlyData.transactions.length - existingFiltered.length;
+  return { added: toAdd.length - removed, updated };
 }
 
 /**
